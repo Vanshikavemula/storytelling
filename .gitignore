@@ -1,0 +1,7 @@
+app/routers/chatbot.py
+app/schemas/chatbot.py
+node_modules
+venv/
+__pycache__/
+*.pyc
+.env

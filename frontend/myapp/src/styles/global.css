@@ -1,0 +1,129 @@
+/* ===== GLOBAL RESET ===== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", sans-serif;
+  background: linear-gradient(135deg, #e0f2fe, #e5e7ff);
+  background-image: url("../assets/bg2.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: #111827;
+  min-height: 100vh;
+}
+
+
+:root {
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+
+  --text-main: #111827;
+  --text-secondary: #6b7280;
+
+  --border: #e5e7eb;
+  --input-border: #d1d5db;
+
+  --card-bg: #ffffff;
+
+  --danger: #dc2626;
+
+}
+
+
+.primary-btn {
+  border-radius: 999px;
+  border: none;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  background: var(--primary);
+  color: white;
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.primary-btn:hover {
+  background: var(--primary-hover);
+}
+
+.secondary-btn {
+  border-radius: 999px;
+  border: none;
+  padding: 8px 16px;
+  background: #e5e7eb;
+  color: #111827;
+}
+
+
+.field-input {
+  width: 100%;
+  border: 1px solid var(--input-border);
+  outline: none;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+
+.field-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
+}
+
+
+.card {
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.12);
+}
+
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 30px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 20px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+
+.hero {
+  max-width: 900px;
+  margin: 80px auto;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: 40px;
+  margin-bottom: 20px;
+}
+
+.hero p {
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+
+.annotator-cta {
+  margin-top: 40px;
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  box-shadow: 0 15px 35px rgba(15, 23, 42, 0.12);
+}
