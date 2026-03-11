@@ -13,10 +13,12 @@ from app.schemas.story import (
     StoryResponse,
     StoryList
 )
-# from app.schemas.chatbot import (
-#     ChatbotRequest,
-#     ChatbotResponse
-# )
+from app.schemas.chatbot import (
+    ChatbotRequest,
+    ChatbotResponse,
+    ChatbotHistoryItem,
+    ChatbotHistoryList
+)
 
 __all__ = [
     "UserSignup",
@@ -25,13 +27,13 @@ __all__ = [
     "UserProfile",
     "UserUpdate",
     "PasswordChange",
-    "Token",
-    "TokenData",
     "LoginResponse",
     "StoryCreate",
     "StoryUpdate",
     "StoryResponse",
     "StoryList",
     "ChatbotRequest",
-    "ChatbotResponse"
+    "ChatbotResponse",
+    "ChatbotHistoryItem",
+    "ChatbotHistoryList",
 ]
