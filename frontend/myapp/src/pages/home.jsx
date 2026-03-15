@@ -123,9 +123,10 @@ export default function Home() {
         <div className="nav-links">
           <Link className="nav-link" to="/">Home</Link>
           {user && <Link className="nav-link" to="/chatbot">Chatbot</Link>}
-          {(isAnnotator || isAdmin) && (
-            <Link className="nav-link" to="/annotator">Annotator</Link>
-          )}
+          {(isAnnotator || isAdmin)
+            ? <Link className="nav-link" to="/annotator">Annotators</Link>
+            : <Link className="nav-link" to="/signup?role=annotator">Annotators</Link>
+          }
         </div>
 
         <div className="nav-actions" style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -190,9 +191,10 @@ export default function Home() {
           }} onClick={(e) => e.stopPropagation()}>
             <Link className="nav-link" to="/"        onClick={() => setMenuOpen(false)}>Home</Link>
             {user && <Link className="nav-link" to="/chatbot" onClick={() => setMenuOpen(false)}>Chatbot</Link>}
-            {(isAnnotator || isAdmin) && (
-              <Link className="nav-link" to="/annotator" onClick={() => setMenuOpen(false)}>Annotator</Link>
-            )}
+            {(isAnnotator || isAdmin)
+              ? <Link className="nav-link" to="/annotator" onClick={() => setMenuOpen(false)}>Annotators</Link>
+              : <Link className="nav-link" to="/signup?role=annotator" onClick={() => setMenuOpen(false)}>Annotators</Link>
+            }
             <hr style={{ border: "none", borderTop: "1px solid #e5e7eb" }} />
             {user
               ? <button className="secondary-btn" onClick={handleLogout} style={{ width: "100%" }}>Logout</button>

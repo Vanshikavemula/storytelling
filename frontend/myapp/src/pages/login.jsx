@@ -84,17 +84,14 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const data = await login({ username, password }); // saves token + returns {user, token}
-      await loadUser();                                  // syncs AuthContext
+      const data = await login({ username, password }); 
+      await loadUser();                                 
 
-      // Route based on role returned by backend (lowercase: "user", "annotator", "admin")
-      // Also respect the ?role= hint passed from signup page
       const role = data?.user?.role?.toLowerCase();
       const roleHint = searchParams.get("role");
 
       if (role === "admin") {
-        // Admin can access everything — send to annotator dashboard as their home base
-        navigate("/annotator");
+        navigate("/");
       } else if (role === "annotator" || roleHint === "annotator") {
         navigate("/annotator");
       } else {
@@ -102,7 +99,6 @@ export default function Login() {
       }
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      // Handle both string and Pydantic array format
       if (Array.isArray(detail)) {
         setError(detail.map((d) => d.msg).join(", "));
       } else {
