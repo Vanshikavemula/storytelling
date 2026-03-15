@@ -3,3 +3,5 @@ venv/
 __pycache__/
 *.pyc
 .env
+story_embeddings.pt
+vocab_embeddings.pt

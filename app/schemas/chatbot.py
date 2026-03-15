@@ -23,19 +23,18 @@
 
 #     class Config:
 #         from_attributes = True
+# app/schemas/chatbot.py
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 
 
-# ─────────────────────────────────────────────
-#  REQUEST — sent by the Chatbot UI on "Send"
-# ─────────────────────────────────────────────
 class ChatbotRequest(BaseModel):
     genre_or_virtue: str = Field(..., min_length=2, max_length=300)
     age_group: str = Field(default="child")
     story_length: Optional[str] = Field(default="medium")
     other_notes: Optional[str] = Field(default="", max_length=500)
+    session_id: Optional[str] = Field(default=None, description="Pass to continue an existing chat session")
 
     @validator("age_group")
     def validate_age_group(cls, v):
@@ -54,17 +53,10 @@ class ChatbotRequest(BaseModel):
         return v.lower()
 
 
-# ─────────────────────────────────────────────
-#  RESPONSE — ml_service.run_pipeline() returns:
-#    { "title", "story", "moral", "moral_label",
-#      "retrieved_story_id", "age_group",
-#      "story_length", "word_count", "processing_time_ms" }
-# ─────────────────────────────────────────────
 class ChatbotResponse(BaseModel):
-    # "story" from ml_service → aliased to "generated_story" for the frontend
     generated_story: str = Field(..., alias="story", description="The adapted story text")
     moral: str
-    moral_label: Optional[str] = None          # "What we learn" / "The lesson" / "Moral"
+    moral_label: Optional[str] = None
     title: Optional[str] = None
     session_id: Optional[str] = None
     retrieved_story_id: Optional[int] = None
@@ -75,12 +67,9 @@ class ChatbotResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        populate_by_name = True   # accept both "story" and "generated_story"
+        populate_by_name = True
 
 
-# ─────────────────────────────────────────────
-#  HISTORY — one past conversation entry
-# ─────────────────────────────────────────────
 class ChatbotHistoryItem(BaseModel):
     conversation_id: int
     session_id: str
