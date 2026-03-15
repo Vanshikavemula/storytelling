@@ -1,6 +1,13 @@
+// frontend/myapp/src/pages/chatbot.jsx
 import { useState, useRef, useEffect, useContext, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { sendQuery, getChatHistory, deleteHistoryItem, clearAllHistory } from "../services/chatbotService";
+import {
+  sendQuery,
+  getSessions,
+  getSessionMessages,
+  deleteSession,
+  clearAllHistory,
+} from "../services/chatbotService";
 import { AuthContext } from "../context/AuthContext";
 import { logout } from "../services/authService";
 
@@ -8,88 +15,119 @@ const AGE_GROUPS    = ["child", "teen", "adult"];
 const STORY_LENGTHS = ["short", "medium", "long"];
 const SUGGESTIONS   = [
   "A story about honesty",
-  "Courage for a child",
+  "Courage under pressure",
   "Kindness and friendship",
   "Perseverance in hard times",
 ];
+
+// ── date grouping helper ─────────────────────────────────────
+function dateGroup(isoString) {
+  const d     = new Date(isoString);
+  const now   = new Date();
+  const diff  = (now - d) / 86400000; // days
+  if (diff < 1)  return "Today";
+  if (diff < 2)  return "Yesterday";
+  if (diff < 8)  return "Previous 7 Days";
+  if (diff < 31) return "Previous 30 Days";
+  return d.toLocaleString("default", { month: "long", year: "numeric" });
+}
+
+function groupSessions(sessions) {
+  const groups = {};
+  const order  = [];
+  sessions.forEach((s) => {
+    const g = dateGroup(s.last_updated);
+    if (!groups[g]) { groups[g] = []; order.push(g); }
+    groups[g].push(s);
+  });
+  return order.map((g) => ({ label: g, items: groups[g] }));
+}
 
 export default function Chatbot() {
   const { user, setUser } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // ── chat state ────────────────────────────────────────────
-  const [messages,      setMessages]      = useState([]);
-  const [input,         setInput]         = useState("");
-  const [loading,       setLoading]       = useState(false);
-  const [ageGroup,      setAgeGroup]      = useState("child");
-  const [storyLength,   setStoryLength]   = useState("medium");
-  const [activeConvId,  setActiveConvId]  = useState(null); // currently loaded conversation_id
+  // ── session / chat state ──────────────────────────────────
+  const [sessions,        setSessions]       = useState([]);   // sidebar list
+  const [sessionsLoading, setSessionsLoading]= useState(false);
+  const [activeSessionId, setActiveSessionId]= useState(null); // currently open session
+  const [messages,        setMessages]       = useState([]);
+  const [input,           setInput]          = useState("");
+  const [loading,         setLoading]        = useState(false);
+  const [ageGroup,        setAgeGroup]       = useState("child");
+  const [storyLength,     setStoryLength]    = useState("medium");
 
-  // ── sidebar / history state ───────────────────────────────
-  const [history,       setHistory]       = useState([]);   // from API
-  const [historyLoading,setHistoryLoading]= useState(false);
-  const [menuOpen,      setMenuOpen]      = useState(false);
-  const [sidebarOpen,   setSidebarOpen]   = useState(false);
+  // ── UI state ──────────────────────────────────────────────
+  const [sidebarOpen,  setSidebarOpen]  = useState(false);
+  const [menuOpen,     setMenuOpen]     = useState(false);
+  const [hoveredId,    setHoveredId]    = useState(null);
+  const [deleteConfirm,setDeleteConfirm]= useState(null); // session_id pending delete
 
   const messagesEndRef = useRef(null);
   const inputRef       = useRef(null);
 
-  // ── scroll to bottom on new message ──────────────────────
+  // ── auto-scroll ────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // ── load history from API on mount ───────────────────────
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    try {
-      const data = await getChatHistory({ limit: 30, skip: 0 });
-      setHistory(data.history || []);
-    } catch (err) {
-      console.error("History load failed:", err);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
-  // ── role helpers ─────────────────────────────────────────
   const isAnnotator = user?.role === "annotator" || user?.role === "ANNOTATOR";
   const isAdmin     = user?.role === "admin"     || user?.role === "ADMIN";
 
-  // ── new chat ──────────────────────────────────────────────
+  // ── load sessions list ─────────────────────────────────────
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const data = await getSessions({ limit: 100 });
+      setSessions(data.sessions || []);
+    } catch (e) {
+      console.error("Sessions load failed:", e);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  // ── new chat ───────────────────────────────────────────────
   const startNewChat = () => {
+    setActiveSessionId(null);
     setMessages([]);
-    setActiveConvId(null);
     setInput("");
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
-
-  // ── load a past conversation into the chat area ───────────
-  const loadConversation = (item) => {
-    setActiveConvId(item.conversation_id);
-    setMessages([
-      { role: "user", text: item.user_query },
-      { role: "bot",  story: item.generated_story, moral: item.moral },
-    ]);
-    setAgeGroup(item.age_group   || "child");
-    setStoryLength(item.story_length || "medium");
     setSidebarOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 80);
   };
 
-  // ── send message ──────────────────────────────────────────
+  // ── open a past session ────────────────────────────────────
+  const openSession = async (sessionId) => {
+    if (sessionId === activeSessionId) { setSidebarOpen(false); return; }
+    try {
+      const data = await getSessionMessages(sessionId);
+      setActiveSessionId(sessionId);
+      setMessages(data.messages || []);
+      setAgeGroup(data.age_group || "child");
+      setStoryLength(data.story_length || "medium");
+      setSidebarOpen(false);
+    } catch (e) {
+      console.error("Load session failed:", e);
+    }
+  };
+
+  // ── send message ───────────────────────────────────────────
   const sendMessage = async (overrideInput) => {
     const text = (overrideInput || input).trim();
     if (!text || loading) return;
 
-    // optimistic user bubble
     setMessages((prev) => [...prev, { role: "user", text }]);
     setInput("");
     setLoading(true);
-    setActiveConvId(null); // new message = new conversation
+
+    // If this is a new session, generate session_id now so all turns share it
+    const sid = activeSessionId || (() => {
+      const id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+      setActiveSessionId(id);
+      return id;
+    })();
 
     try {
       const res = await sendQuery({
@@ -97,15 +135,14 @@ export default function Chatbot() {
         genre_or_virtue: text,
         story_length:    storyLength,
         other_notes:     "",
+        session_id:      sid,
       });
 
       const storyText = res.generated_story || res.story || "No story returned.";
-      const moral     = res.moral || "";
+      setMessages((prev) => [...prev, { role: "bot", story: storyText, moral: res.moral || "" }]);
 
-      setMessages((prev) => [...prev, { role: "bot", story: storyText, moral }]);
-
-      // refresh sidebar history so new entry appears immediately
-      loadHistory();
+      // Refresh sidebar so the new/updated session appears
+      loadSessions();
     } catch (err) {
       const detail = err?.response?.data?.detail;
       const errMsg = Array.isArray(detail)
@@ -122,57 +159,47 @@ export default function Chatbot() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
-  // ── delete a single history item ─────────────────────────
-  const handleDeleteItem = async (e, convId) => {
+  // ── delete session ─────────────────────────────────────────
+  const handleDeleteSession = async (e, sessionId) => {
     e.stopPropagation();
+    if (deleteConfirm !== sessionId) { setDeleteConfirm(sessionId); return; }
     try {
-      await deleteHistoryItem(convId);
-      setHistory((prev) => prev.filter((h) => h.conversation_id !== convId));
-      if (activeConvId === convId) startNewChat();
-    } catch (err) {
-      console.error("Delete failed:", err);
-    }
+      await deleteSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.session_id !== sessionId));
+      if (activeSessionId === sessionId) startNewChat();
+    } catch (err) { console.error("Delete session failed:", err); }
+    setDeleteConfirm(null);
   };
 
-  // ── clear all history ─────────────────────────────────────
-  const clearChat = async () => {
+  // ── clear all ──────────────────────────────────────────────
+  const handleClearAll = async () => {
+    if (!window.confirm("Delete all chat history?")) return;
     try {
       await clearAllHistory();
-      setHistory([]);
+      setSessions([]);
       startNewChat();
-    } catch (err) {
-      console.error("Clear failed:", err);
-    }
+    } catch (err) { console.error("Clear all failed:", err); }
   };
 
-  // ── logout ────────────────────────────────────────────────
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    navigate("/");
-  };
+  // ── logout ─────────────────────────────────────────────────
+  const handleLogout = async () => { await logout(); setUser(null); navigate("/"); };
 
-  // ── group history by date ─────────────────────────────────
-  const groupedHistory = (() => {
-    const today     = new Date();
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-    const groups    = { Today: [], Yesterday: [], Older: [] };
+  const grouped = groupSessions(sessions);
 
-    history.forEach((h) => {
-      const d = new Date(h.created_at);
-      if (d.toDateString() === today.toDateString())     groups.Today.push(h);
-      else if (d.toDateString() === yesterday.toDateString()) groups.Yesterday.push(h);
-      else groups.Older.push(h);
-    });
-    return groups;
-  })();
-
+  // ─────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg)" }}>
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100vh",
+      background: "var(--bg)", fontFamily: "var(--font-body)",
+    }}>
 
-      {/* ── Navbar ─────────────────────────────────────── */}
+      {/* ── Navbar ── */}
       <nav className="navbar">
-        <Link to="/" className="navbar-brand">Story<span style={{ color: "#f97316" }}>Nest</span></Link>
+        <Link to="/" className="navbar-brand">
+          Story<span style={{ color: "#f97316" }}>Nest</span>
+        </Link>
         <div className="nav-links">
           <Link className="nav-link" to="/">Home</Link>
           <Link className="nav-link active" to="/chatbot">Chatbot</Link>
@@ -189,7 +216,7 @@ export default function Chatbot() {
         </button>
       </nav>
 
-      {/* ── Mobile menu ────────────────────────────────── */}
+      {/* ── Mobile nav menu ── */}
       <div className={`mobile-menu ${menuOpen ? "open" : ""}`}>
         <Link className="nav-link" to="/" onClick={() => setMenuOpen(false)}>Home</Link>
         <Link className="nav-link active" to="/chatbot" onClick={() => setMenuOpen(false)}>Chatbot</Link>
@@ -202,164 +229,248 @@ export default function Chatbot() {
         </button>
       </div>
 
-      {/* ── Chat Layout ────────────────────────────────── */}
+      {/* ── Chat layout ── */}
       <div className="chat-layout" style={{ flex: 1, overflow: "hidden" }}>
 
         {/* Mobile sidebar backdrop */}
         {sidebarOpen && (
           <div onClick={() => setSidebarOpen(false)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 89 }} />
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 89 }} />
         )}
 
-        {/* ── Sidebar ──────────────────────────────────── */}
-        <aside className={`chat-sidebar ${sidebarOpen ? "mobile-open" : ""}`}>
+        {/* ════════════════════════════════════════
+            SIDEBAR
+        ════════════════════════════════════════ */}
+        <aside className={`chat-sidebar ${sidebarOpen ? "mobile-open" : ""}`}
+          style={{ display: "flex", flexDirection: "column", gap: 0, padding: 0 }}>
 
-          {/* Header: New Chat + Clear */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <span className="chat-sidebar-title">Chats</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              {/* New Chat button */}
-              <button
-                className="icon-btn"
-                style={{ width: 28, height: 28 }}
-                onClick={startNewChat}
-                title="New Chat"
-              >
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              {/* Clear All button */}
-              <button
-                className="icon-btn"
-                style={{ width: 28, height: 28 }}
-                onClick={clearChat}
-                title="Clear all history"
-              >
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
+          {/* Sidebar top: New Chat button */}
+          <div style={{ padding: "16px 12px 10px", borderBottom: "1px solid var(--border)" }}>
+            <button
+              onClick={startNewChat}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 14px", borderRadius: 10, border: "1px solid var(--border)",
+                background: activeSessionId === null ? "var(--primary-light)" : "var(--surface)",
+                color: activeSessionId === null ? "var(--primary)" : "var(--text-2)",
+                fontWeight: 600, fontSize: 13, cursor: "pointer",
+                transition: "all 0.15s", fontFamily: "var(--font-body)",
+              }}
+            >
+              {/* pencil/compose icon */}
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              New Chat
+            </button>
           </div>
 
-          {/* History list grouped by date */}
-          {historyLoading ? (
-            <p style={{ fontSize: 12, color: "var(--text-3)", padding: "0 6px" }}>Loading…</p>
-          ) : history.length === 0 ? (
-            <p style={{ fontSize: 12, color: "var(--text-3)", padding: "0 6px" }}>No history yet</p>
-          ) : (
-            Object.entries(groupedHistory).map(([group, items]) =>
-              items.length === 0 ? null : (
-                <div key={group} style={{ marginBottom: 8 }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "6px 6px 4px" }}>
-                    {group}
-                  </p>
-                  {items.map((h) => (
-                    <div
-                      key={h.conversation_id}
-                      className={`chat-history-item ${activeConvId === h.conversation_id ? "active" : ""}`}
-                      onClick={() => loadConversation(h)}
-                      style={{ justifyContent: "space-between" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-                        <span style={{ flexShrink: 0 }}>💬</span>
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13 }}>
-                          {h.user_query?.slice(0, 34) || "Story"}
-                        </span>
-                      </div>
-                      {/* Delete single item */}
-                      <button
-                        onClick={(e) => handleDeleteItem(e, h.conversation_id)}
-                        style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: "2px 4px", borderRadius: 4, opacity: 0.6 }}
-                        title="Delete"
+          {/* Sidebar label + clear all */}
+          <div style={{
+            padding: "10px 14px 6px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--text-3)" }}>
+              My Chats
+            </span>
+            {sessions.length > 0 && (
+              <button onClick={handleClearAll} title="Clear all chats" style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-3)", padding: 4, borderRadius: 4,
+                display: "flex", alignItems: "center",
+              }}>
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Session list */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "0 8px 16px" }}>
+            {sessionsLoading ? (
+              <div style={{ padding: "20px 6px", textAlign: "center" }}>
+                <div style={{
+                  width: 20, height: 20, margin: "0 auto 8px",
+                  border: "2px solid var(--border)", borderTopColor: "var(--primary)",
+                  borderRadius: "50%", animation: "spin 0.7s linear infinite",
+                }} />
+                <p style={{ fontSize: 12, color: "var(--text-3)" }}>Loading chats…</p>
+              </div>
+            ) : sessions.length === 0 ? (
+              <div style={{ padding: "32px 10px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
+                <p style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.5 }}>
+                  No chats yet.<br />Start one below!
+                </p>
+              </div>
+            ) : (
+              grouped.map(({ label, items }) => (
+                <div key={label}>
+                  {/* Date group label */}
+                  <p style={{
+                    fontSize: 10, fontWeight: 700, color: "var(--text-3)",
+                    textTransform: "uppercase", letterSpacing: "0.08em",
+                    padding: "10px 8px 4px", margin: 0,
+                  }}>{label}</p>
+
+                  {items.map((s) => {
+                    const isActive  = activeSessionId === s.session_id;
+                    const isHovered = hoveredId === s.session_id;
+                    const isPending = deleteConfirm === s.session_id;
+
+                    return (
+                      <div
+                        key={s.session_id}
+                        onClick={() => openSession(s.session_id)}
+                        onMouseEnter={() => setHoveredId(s.session_id)}
+                        onMouseLeave={() => { setHoveredId(null); setDeleteConfirm(null); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "9px 10px", borderRadius: 8, cursor: "pointer",
+                          marginBottom: 2,
+                          background: isActive ? "var(--primary-light)" : isHovered ? "rgba(0,0,0,0.04)" : "transparent",
+                          border: isActive ? "1px solid rgba(91,79,207,0.25)" : "1px solid transparent",
+                          transition: "all 0.12s",
+                        }}
                       >
-                        <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        {/* chat bubble icon */}
+                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24"
+                          stroke={isActive ? "var(--primary)" : "var(--text-3)"} strokeWidth={2}
+                          style={{ flexShrink: 0 }}>
+                          <path strokeLinecap="round" strokeLinejoin="round"
+                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
-                      </button>
-                    </div>
-                  ))}
+
+                        {/* Title */}
+                        <span style={{
+                          flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          fontSize: 13, fontWeight: isActive ? 600 : 400,
+                          color: isActive ? "var(--primary)" : "var(--text)",
+                        }}>
+                          {s.title}
+                        </span>
+
+                        {/* Delete button — shows on hover */}
+                        {(isHovered || isActive) && (
+                          <button
+                            onClick={(e) => handleDeleteSession(e, s.session_id)}
+                            title={isPending ? "Click again to confirm" : "Delete chat"}
+                            style={{
+                              flexShrink: 0, background: isPending ? "var(--danger)" : "none",
+                              border: "none", cursor: "pointer", padding: "2px 5px", borderRadius: 5,
+                              color: isPending ? "white" : "var(--text-3)",
+                              fontSize: 10, fontWeight: 600,
+                              display: "flex", alignItems: "center", gap: 3,
+                            }}
+                          >
+                            {isPending ? (
+                              "Delete?"
+                            ) : (
+                              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              )
-            )
-          )}
+              ))
+            )}
+          </div>
 
-          {/* Settings panel */}
-          <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-            <p className="chat-sidebar-title" style={{ marginBottom: 10 }}>Settings</p>
+          {/* Settings panel at bottom */}
+          <div style={{ borderTop: "1px solid var(--border)", padding: "14px 14px 16px" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: 10 }}>
+              Settings
+            </p>
 
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 6 }}>Age Group</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 5 }}>Age Group</p>
+            <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
               {AGE_GROUPS.map((a) => (
                 <button key={a} onClick={() => setAgeGroup(a)} style={{
-                  padding: "7px 10px", borderRadius: 8, border: "1px solid",
+                  flex: 1, padding: "6px 4px", borderRadius: 7, border: "1px solid",
                   borderColor: ageGroup === a ? "var(--primary)" : "var(--border)",
-                  background:  ageGroup === a ? "var(--primary-light)" : "transparent",
-                  color:       ageGroup === a ? "var(--primary)" : "var(--text-2)",
-                  fontSize: 12, fontWeight: ageGroup === a ? 600 : 400,
-                  cursor: "pointer", textAlign: "left", textTransform: "capitalize",
-                  fontFamily: "var(--font-body)"
+                  background: ageGroup === a ? "var(--primary-light)" : "transparent",
+                  color: ageGroup === a ? "var(--primary)" : "var(--text-2)",
+                  fontSize: 11, fontWeight: ageGroup === a ? 700 : 400,
+                  cursor: "pointer", textTransform: "capitalize", fontFamily: "var(--font-body)",
                 }}>{a}</button>
               ))}
             </div>
 
-            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 6 }}>Story Length</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", marginBottom: 5 }}>Length</p>
+            <div style={{ display: "flex", gap: 4 }}>
               {STORY_LENGTHS.map((s) => (
                 <button key={s} onClick={() => setStoryLength(s)} style={{
-                  padding: "7px 10px", borderRadius: 8, border: "1px solid",
+                  flex: 1, padding: "6px 4px", borderRadius: 7, border: "1px solid",
                   borderColor: storyLength === s ? "var(--primary)" : "var(--border)",
-                  background:  storyLength === s ? "var(--primary-light)" : "transparent",
-                  color:       storyLength === s ? "var(--primary)" : "var(--text-2)",
-                  fontSize: 12, fontWeight: storyLength === s ? 600 : 400,
-                  cursor: "pointer", textAlign: "left", textTransform: "capitalize",
-                  fontFamily: "var(--font-body)"
+                  background: storyLength === s ? "var(--primary-light)" : "transparent",
+                  color: storyLength === s ? "var(--primary)" : "var(--text-2)",
+                  fontSize: 11, fontWeight: storyLength === s ? 700 : 400,
+                  cursor: "pointer", textTransform: "capitalize", fontFamily: "var(--font-body)",
                 }}>{s}</button>
               ))}
             </div>
           </div>
         </aside>
 
-        {/* ── Main chat area ─────────────────────────────── */}
+        {/* ════════════════════════════════════════
+            MAIN CHAT AREA
+        ════════════════════════════════════════ */}
         <div className="chat-main">
 
           {/* Topbar */}
           <div className="chat-topbar">
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {/* Mobile sidebar toggle */}
-              <button className="icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}
-                style={{ display: "none" }} id="sidebar-toggle">
+              {/* Mobile: hamburger to open sidebar */}
+              <button
+                className="icon-btn"
+                id="sidebar-toggle"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                style={{ display: "none" }}
+              >
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
+
               <button className="back-btn" onClick={() => navigate(-1)}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
                 Back
               </button>
+
               <div>
-                <p style={{ fontWeight: 600, fontSize: 15 }}>Story Assistant</p>
+                <p style={{ fontWeight: 600, fontSize: 15 }}>
+                  {activeSessionId
+                    ? (sessions.find(s => s.session_id === activeSessionId)?.title || "Chat") 
+                    : "Story Assistant"}
+                </p>
                 <p style={{ fontSize: 12, color: "var(--text-3)" }}>{ageGroup} · {storyLength}</p>
               </div>
             </div>
-            {/* New Chat (topbar) */}
+
+            {/* Topbar: New Chat button */}
             <button
-              className="secondary-btn"
-              style={{ fontSize: 12, padding: "6px 14px", display: "flex", alignItems: "center", gap: 6 }}
               onClick={startNewChat}
-              title="Start a new chat"
+              className="secondary-btn"
+              style={{ fontSize: 12, padding: "7px 14px", display: "flex", alignItems: "center", gap: 6 }}
             >
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               New Chat
             </button>
           </div>
 
-          {/* Messages */}
+          {/* Messages area */}
           <div className="chat-messages">
             {messages.length === 0 && !loading && (
               <div className="chat-empty">
@@ -378,7 +489,9 @@ export default function Chatbot() {
               <div key={i} className={`chat-bubble-wrap ${m.role}`}>
                 <div className={`chat-avatar ${m.role}`}>{m.role === "bot" ? "🤖" : "👤"}</div>
                 <div className={`chat-bubble ${m.role}`}>
-                  {m.role === "user" ? m.text : (
+                  {m.role === "user" ? (
+                    m.text
+                  ) : (
                     <>
                       <div style={{ fontFamily: "'Georgia', serif", lineHeight: 1.75 }}>{m.story}</div>
                       {m.moral && (
@@ -420,7 +533,7 @@ export default function Chatbot() {
               <input
                 ref={inputRef}
                 className="field-input"
-                placeholder="Ask for a moral story… e.g. 'A story about courage'"
+                placeholder={activeSessionId ? "Ask a follow-up…" : "Ask for a moral story… e.g. 'A story about courage'"}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -434,9 +547,12 @@ export default function Chatbot() {
               >
                 {loading ? (
                   <span style={{ display: "inline-flex", gap: 4 }}>
-                    <span style={{ width: 5, height: 5, background: "white", borderRadius: "50%", animation: "bounce 1.2s infinite" }} />
-                    <span style={{ width: 5, height: 5, background: "white", borderRadius: "50%", animation: "bounce 1.2s infinite 0.2s" }} />
-                    <span style={{ width: 5, height: 5, background: "white", borderRadius: "50%", animation: "bounce 1.2s infinite 0.4s" }} />
+                    {[0, 0.2, 0.4].map((d, i) => (
+                      <span key={i} style={{
+                        width: 5, height: 5, background: "white", borderRadius: "50%",
+                        animation: `bounce 1.2s infinite ${d}s`,
+                      }} />
+                    ))}
                   </span>
                 ) : (
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
@@ -446,8 +562,16 @@ export default function Chatbot() {
               </button>
             </div>
           </div>
-        </div>
-      </div>
+        </div>{/* /chat-main */}
+      </div>{/* /chat-layout */}
+
+      {/* Mobile: show sidebar toggle in topbar */}
+      <style>{`
+        @media (max-width: 768px) {
+          #sidebar-toggle { display: flex !important; }
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
