@@ -60,5 +60,5 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False,autoflush=False,bind=engine)
 
 Base = declarative_base()
-Base.metadata.schema = "nlp_story"
+# Base.metadata.schema = "nlp_story"
 

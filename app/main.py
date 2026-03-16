@@ -109,6 +109,10 @@ app = FastAPI(
     lifespan=lifespan,               # ← pass lifespan here
 )
  
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 # Keep your existing CORS / middleware setup unchanged
 app.add_middleware(
     CORSMiddleware,
