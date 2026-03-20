@@ -118,12 +118,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173",
     "http://localhost:3000",
-    "https://storytelling-zeta.vercel.app",
-    "https://nonpendant-appeasingly-scott.ngrok-free.dev"],             # tighten in production
+    "https://storytelling-zeta.vercel.app"],             # tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
  
 # Include routers (unchanged)
 app.include_router(chatbot.router)
