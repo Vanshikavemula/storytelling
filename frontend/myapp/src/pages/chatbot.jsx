@@ -1052,7 +1052,7 @@ export default function Chatbot() {
               <input
                 ref={inputRef}
                 className="field-input"
-                placeholder={activeSessionId ? "Ask a follow-up…" : "Ask for a moral story… e.g. 'A story about courage'"}
+                placeholder={activeSessionId ? "Ask a follow-up…" : "Ask for any story… e.g. 'A story about courage'"}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
