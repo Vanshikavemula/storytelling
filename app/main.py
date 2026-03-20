@@ -116,7 +116,7 @@ async def health_check():
 # Keep your existing CORS / middleware setup unchanged
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],             # tighten in production
+    allow_origins=["*","https://storytelling-zeta.vercel.app"],             # tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
