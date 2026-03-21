@@ -28,20 +28,20 @@ export default function ProtectedRoute({ children, role }) {
 
   const userRole = user.role?.toLowerCase();
 
+  // Admin bypasses all role checks
+  if (userRole === "admin") return children;
+
   if (role) {
     const requiredRole = role.toLowerCase();
 
-    // Admin can access everything
-    if (userRole === "admin") return children;
-
-    // chatbot route (role="user"): only "user" allowed, not "annotator"
-    if (requiredRole === "user") {
-      if (userRole !== "user") return <Navigate to="/" />;
+    // /chatbot requires "user" role — annotators cannot access
+    if (requiredRole === "user" && userRole !== "user") {
+      return <Navigate to="/" />;
     }
 
-    // annotator route (role="annotator"): only "annotator" allowed, not "user"
-    if (requiredRole === "annotator") {
-      if (userRole !== "annotator") return <Navigate to="/" />;
+    // /annotator requires "annotator" role — users cannot access
+    if (requiredRole === "annotator" && userRole !== "annotator") {
+      return <Navigate to="/" />;
     }
   }
 
