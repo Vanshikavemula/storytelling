@@ -79,7 +79,6 @@ async def get_all_stories(
     limit: int = 100,
     search: Optional[str] = None,
     age_group: Optional[str] = None,
-    genre: Optional[str] = None,
     current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
     db: Session = Depends(get_db)
 ):
@@ -99,10 +98,6 @@ async def get_all_stories(
     # Apply age group filter
     if age_group:
         query = query.filter(Story.age_group == age_group)
-    
-    # Apply genre filter
-    if genre:
-        query = query.filter(Story.genre.ilike(f"%{genre}%"))
     
     # Get total count
     total = query.count()
@@ -433,17 +428,7 @@ async def get_story_statistics(
         Story.age_group.isnot(None)
     ).group_by(Story.age_group).all()
     
-    # Count by genre
-    genre_stats = db.query(
-        Story.genre,
-        func.count(Story.story_id)
-    ).filter(
-        Story.user_id == current_user.user_id,
-        Story.genre.isnot(None)
-    ).group_by(Story.genre).all()
-    
     return {
         "total_stories": total_stories,
-        "by_age_group": {ag: count for ag, count in age_group_stats},
-        "by_genre": {g: count for g, count in genre_stats}
+        "by_age_group": {ag: count for ag, count in age_group_stats}
     }
