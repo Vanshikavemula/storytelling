@@ -1,16 +1,3 @@
-// import { useContext } from "react";
-// import { Navigate } from "react-router-dom";
-// import { AuthContext } from "../context/AuthContext";
-
-// export default function ProtectedRoute({ children, role }) {
-//   const { user } = useContext(AuthContext);
-
-//   if (!user) return <Navigate to="/login" />;
-
-//   if (role && user.role !== role) return <Navigate to="/" />;
-
-//   return children;
-// }
 import { useContext } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
@@ -18,7 +5,6 @@ import { AuthContext } from "../context/AuthContext";
 export default function ProtectedRoute({ children, role }) {
   const { user, authLoading } = useContext(AuthContext);
 
-  // Wait for auth check to finish before redirecting
   if (authLoading) {
     return (
       <div style={{
@@ -37,15 +23,26 @@ export default function ProtectedRoute({ children, role }) {
     );
   }
 
+  // Not logged in → go to login
   if (!user) return <Navigate to="/login" />;
 
-  // Backend returns lowercase roles: "user", "annotator", "admin"
-  // Support both cases just in case
+  const userRole = user.role?.toLowerCase();
+
   if (role) {
-    const userRole = user.role?.toLowerCase();
-    const requiredRole = role?.toLowerCase();
-    // Admin bypasses all role checks — they can access every protected page
-    if (userRole !== "admin" && userRole !== requiredRole) return <Navigate to="/" />;
+    const requiredRole = role.toLowerCase();
+
+    // Admin can access everything
+    if (userRole === "admin") return children;
+
+    // chatbot route (role="user"): only "user" allowed, not "annotator"
+    if (requiredRole === "user") {
+      if (userRole !== "user") return <Navigate to="/" />;
+    }
+
+    // annotator route (role="annotator"): only "annotator" allowed, not "user"
+    if (requiredRole === "annotator") {
+      if (userRole !== "annotator") return <Navigate to="/" />;
+    }
   }
 
   return children;
