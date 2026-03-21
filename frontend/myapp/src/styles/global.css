@@ -1104,12 +1104,6 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   background: var(--bg);
 }
 
-[data-theme="dark"] .field-input {
-  background: var(--surface-2);
-  color: var(--text);
-  border-color: var(--border);
-}
-
 [data-theme="dark"] .chat-bubble.bot {
   background: var(--surface);
   border-color: var(--border);
@@ -1128,12 +1122,6 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   background: transparent;
 }
 
-[data-theme="dark"] .chat-option-chip {
-  background: var(--surface);
-  border-color: var(--border);
-  color: var(--text-2);
-}
-
 [data-theme="dark"] .new-chat-btn {
   background: var(--surface-2);
   border-color: var(--border);
@@ -1149,6 +1137,47 @@ textarea.field-input { resize: vertical; min-height: 80px; line-height: 1.5; }
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+[data-theme="dark"] .chat-option-chip {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+[data-theme="dark"] .chat-option-chip:hover,
+[data-theme="dark"] .chat-option-chip.selected {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+[data-theme="dark"] .virtue-label {
+  color: var(--text-3);
+}
+
+[data-theme="dark"] .options-divider {
+  background: var(--border);
+}
+
+[data-theme="dark"] .chat-input-area {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .field-input {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .field-input::placeholder {
+  color: var(--text-3);
+}
+
+/* defaults hint text in dark mode */
+[data-theme="dark"] .chat-options span[style] {
+  color: var(--text-3) !important;
 }
 
 /* ===== HOME FEATURES GRID ===== */
