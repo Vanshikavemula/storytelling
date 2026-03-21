@@ -81,8 +81,9 @@ from app.config import get_settings
 from app.database import engine, Base
 from app.models import User, Story, ChatbotConversation
 from app.routes import auth, stories, chatbot
- 
- 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -108,6 +109,14 @@ app = FastAPI(
     title="Story API",
     lifespan=lifespan,               # ← pass lifespan here
 )
+ 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("UNHANDLED ERROR:", repr(exc))
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    ) 
  
 @app.get("/health")
 async def health_check():
