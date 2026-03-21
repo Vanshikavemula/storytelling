@@ -42,21 +42,3 @@ class StoryList(BaseModel):
     total: int
     page: int = 1
     page_size: int = 50
-
-
-# class StorySearch(BaseModel):
-#     search_term: Optional[str] = None
-#     age_group: Optional[str] = None
-#     genre: Optional[str] = None
-#     virtue: Optional[str] = None
-#     page: int = Field(default=1, ge=1)
-#     page_size: int = Field(default=50, ge=1, le=100)
-
-
-# class StoryExport(BaseModel):
-#     entity: str
-#     virtues: Optional[str]
-#     keywords: Optional[str]
-#     age_group: Optional[str]
-#     story_group: Optional[str]
-#     story_text: str

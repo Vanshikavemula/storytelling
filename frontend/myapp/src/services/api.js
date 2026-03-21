@@ -19,10 +19,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ── On 401: clear the bad token but DO NOT redirect here ─────────
-// Redirection is handled by ProtectedRoute and AuthContext instead.
-// If the interceptor redirects, it creates an infinite loop because
-// AuthContext.loadUser() is called on every page including /login itself.
 api.interceptors.response.use(
   (response) => response,
   (error) => {

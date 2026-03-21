@@ -55,8 +55,11 @@ export default function Chatbot() {
   const [messages,        setMessages]        = useState([]);
   const [input,           setInput]           = useState("");
   const [loading,         setLoading]         = useState(false);
-  const [ageGroup,        setAgeGroup]        = useState("child");
-  const [storyLength,     setStoryLength]     = useState("medium");
+
+  // null = not selected → backend will use its default (child / medium)
+  const [ageGroup,        setAgeGroup]        = useState(null);
+  const [storyLength,     setStoryLength]     = useState(null);
+
   const [selectedVirtue,  setSelectedVirtue]  = useState(null);
   const [showOtherVirtue, setShowOtherVirtue] = useState(false);
   const [otherVirtue,     setOtherVirtue]     = useState("");
@@ -110,6 +113,8 @@ export default function Chatbot() {
     setActiveSessionId(null);
     setMessages([]);
     setInput("");
+    setAgeGroup(null);
+    setStoryLength(null);
     setSidebarOpen(false);
     setTimeout(() => inputRef.current?.focus(), 80);
   };
@@ -121,13 +126,18 @@ export default function Chatbot() {
       const data = await getSessionMessages(sessionId);
       setActiveSessionId(sessionId);
       setMessages(data.messages || []);
-      setAgeGroup(data.age_group || "child");
-      setStoryLength(data.story_length || "medium");
+      // restore selections if session had them, otherwise clear to null
+      setAgeGroup(data.age_group || null);
+      setStoryLength(data.story_length || null);
       setSidebarOpen(false);
     } catch (e) {
       console.error("Load session failed:", e);
     }
   };
+
+  // ── toggle chip helpers (click again to deselect) ─────────
+  const toggleAgeGroup = (val) => setAgeGroup(prev => prev === val ? null : val);
+  const toggleStoryLength = (val) => setStoryLength(prev => prev === val ? null : val);
 
   // ── send message ───────────────────────────────────────────
   const sendMessage = async (overrideInput) => {
@@ -146,9 +156,10 @@ export default function Chatbot() {
 
     try {
       const res = await sendQuery({
-        age_group:       ageGroup,
+        // send null → backend schema default kicks in (child / medium)
+        age_group:       ageGroup || "child",
         genre_or_virtue: text,
-        story_length:    storyLength,
+        story_length:    storyLength || "medium",
         other_notes:     "",
         session_id:      sid,
       });
@@ -414,17 +425,41 @@ export default function Chatbot() {
           {/* Input area — always visible at bottom */}
           <div className="chat-input-area">
 
-            {/* Row 1: Age group + Length */}
+            {/* Row 1: Age group + Length — optional, click again to deselect */}
             <div className="chat-options">
+              <span className="virtue-label">Age:</span>
               {AGE_GROUPS.map((a) => (
-                <button key={a} className={`chat-option-chip ${ageGroup === a ? "selected" : ""}`}
-                  onClick={() => setAgeGroup(a)}>{a}</button>
+                <button
+                  key={a}
+                  className={`chat-option-chip ${ageGroup === a ? "selected" : ""}`}
+                  onClick={() => toggleAgeGroup(a)}
+                  title={ageGroup === a ? "Click to deselect" : ""}
+                >
+                  {a}
+                </button>
               ))}
               <div className="options-divider" />
+              <span className="virtue-label">Length:</span>
               {STORY_LENGTHS.map((s) => (
-                <button key={s} className={`chat-option-chip ${storyLength === s ? "selected" : ""}`}
-                  onClick={() => setStoryLength(s)}>{s}</button>
+                <button
+                  key={s}
+                  className={`chat-option-chip ${storyLength === s ? "selected" : ""}`}
+                  onClick={() => toggleStoryLength(s)}
+                  title={storyLength === s ? "Click to deselect" : ""}
+                >
+                  {s}
+                </button>
               ))}
+              {/* hint label when nothing selected */}
+              {(!ageGroup || !storyLength) && (
+                <span style={{ fontSize: 11, color: "var(--text-3)", marginLeft: 4, whiteSpace: "nowrap" }}>
+                  {!ageGroup && !storyLength
+                    ? "(defaults: child · medium)"
+                    : !ageGroup
+                    ? "(age default: child)"
+                    : "(length default: medium)"}
+                </span>
+              )}
             </div>
 
             {/* Row 2: Virtues + Other */}

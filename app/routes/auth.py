@@ -216,34 +216,6 @@ async def delete_user(
     
     return {"message": "User deleted successfully"}
 
-
-# @router.get("/check-username/{username}")
-# async def check_username_availability(username: str, db: Session = Depends(get_db)):
-
-#     existing_user = db.query(User).filter(User.username == username).first()
-    
-#     return {
-#         "username": username,
-#         "available": existing_user is None
-#     }
-
-
-# @router.get("/check-email/{email}")
-# async def check_email_availability(email: str, db: Session = Depends(get_db)):
-#     existing_email = db.query(User).filter(User.email == email).first()
-    
-#     return {
-#         "email": email,
-#         "available": existing_email is None
-#     }
-
-# from app.utils.security import check_password_strength
-
-# @router.post("/check-password-strength")
-# async def check_password(password: str):
-#     result = check_password_strength(password)
-#     return result
-
 @router.post("/logout")
 async def logout(
     token: HTTPAuthorizationCredentials = Depends(security),

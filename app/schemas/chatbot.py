@@ -1,29 +1,3 @@
-# from pydantic import BaseModel, Field
-# from typing import Literal, Optional
-
-
-# class ChatbotRequest(BaseModel):
-#     age_group: Literal["child", "teen", "adult"]
-#     genre_or_virtue: str = Field(
-#         ..., min_length=1,
-#         description="Genre or virtue like honesty, courage, adventure"
-#     )
-#     story_length: Optional[Literal["short", "medium", "long"]] = "medium"
-#     other_notes: Optional[str] = Field(
-#         None, description="Any extra instructions or preferences"
-#     )
-
-
-# class ChatbotResponse(BaseModel):
-#     title: str
-#     story: str
-#     moral: str
-#     retrieved_story_id: int
-#     processing_time_ms: int
-
-#     class Config:
-#         from_attributes = True
-# app/schemas/chatbot.py
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
