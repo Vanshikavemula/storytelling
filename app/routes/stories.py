@@ -16,6 +16,7 @@ from app.schemas.story import (
     StoryList
 )
 from app.utils.dependencies import role_required, normalize_age_group
+from app.services.ml_service import get_ml_service
 
 router = APIRouter(prefix="/api/stories", tags=["Stories"])
 
@@ -58,6 +59,12 @@ async def create_story(
         db.commit()
         db.refresh(new_story)
 
+        # ── rebuild embeddings so chatbot can find this story immediately ──
+        try:
+            get_ml_service().rebuild_embeddings(db)
+        except Exception as e:
+            print(f"[stories] ⚠️ embedding rebuild failed (non-fatal): {e}")
+
         return new_story
 
     except HTTPException:
@@ -65,12 +72,6 @@ async def create_story(
     except Exception as e:
         print("ERROR:", e)
         raise HTTPException(500, "Failed to create story")
-    except Exception as e:
-        print("ERROR:", e) 
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)     
-        )
 
 
 @router.get("/", response_model=StoryList)
@@ -79,13 +80,12 @@ async def get_all_stories(
     limit: int = 100,
     search: Optional[str] = None,
     age_group: Optional[str] = None,
-    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
+    genre: Optional[str] = None,
+    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    
     query = db.query(Story).filter(Story.user_id == current_user.user_id)
-    
-    # Apply search filter
+
     if search:
         search_filter = or_(
             Story.entity.ilike(f"%{search}%"),
@@ -94,17 +94,13 @@ async def get_all_stories(
             Story.story_text.ilike(f"%{search}%")
         )
         query = query.filter(search_filter)
-    
-    # Apply age group filter
+
     if age_group:
         query = query.filter(Story.age_group == age_group)
-    
-    # Get total count
+
     total = query.count()
-    
-    # Get paginated results
     stories = query.order_by(Story.story_id.asc()).offset(skip).limit(limit).all()
-    
+
     return StoryList(
         stories=stories,
         total=total,
@@ -116,22 +112,22 @@ async def get_all_stories(
 @router.get("/{story_id}", response_model=StoryResponse)
 async def get_story_by_id(
     story_id: int,
-    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
+    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    
     story = db.query(Story).filter(
         Story.story_id == story_id,
         Story.user_id == current_user.user_id
     ).first()
-    
+
     if not story:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Story not found"
         )
-    
+
     return story
+
 
 @router.put("/{story_id}", response_model=StoryResponse)
 async def update_story(
@@ -187,60 +183,80 @@ async def update_story(
     db.commit()
     db.refresh(story)
 
+    # ── rebuild so updated story content is reflected in chatbot ──
+    try:
+        get_ml_service().rebuild_embeddings(db)
+    except Exception as e:
+        print(f"[stories] ⚠️ embedding rebuild failed (non-fatal): {e}")
+
     return story
 
 
 @router.delete("/{story_id}")
 async def delete_story(
     story_id: int,
-    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
+    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    
     story = db.query(Story).filter(
         Story.story_id == story_id,
         Story.user_id == current_user.user_id
     ).first()
-    
+
     if not story:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Story not found"
         )
-    
+
     db.delete(story)
     db.commit()
-    
+
+    # ── rebuild so deleted story is no longer retrieved ──
+    try:
+        get_ml_service().rebuild_embeddings(db)
+    except Exception as e:
+        print(f"[stories] ⚠️ embedding rebuild failed (non-fatal): {e}")
+
     return {"message": "Story deleted successfully"}
 
 
 @router.post("/bulk-delete")
 async def bulk_delete_stories(
     story_ids: List[int],
-    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
+    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
     deleted_count = db.query(Story).filter(
         Story.story_id.in_(story_ids),
         Story.user_id == current_user.user_id
     ).delete(synchronize_session=False)
-    
+
     db.commit()
-    
+
+    # ── rebuild after bulk delete ──
+    try:
+        get_ml_service().rebuild_embeddings(db)
+    except Exception as e:
+        print(f"[stories] ⚠️ embedding rebuild failed (non-fatal): {e}")
+
     return {
         "message": f"Successfully deleted {deleted_count} stories",
         "deleted_count": deleted_count
     }
+
 
 from fastapi import Query
 from fastapi.responses import Response
 from io import StringIO
 import csv
 
+
 def clean_csv_field(value):
     if not value or not value.strip():
         return None
     return ", ".join(part.strip() for part in value.split(","))
+
 
 @router.get("/export/csv")
 async def export_stories_csv(
@@ -250,7 +266,6 @@ async def export_stories_csv(
     current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-
     query = db.query(Story).filter(
         Story.user_id == current_user.user_id
     )
@@ -269,17 +284,9 @@ async def export_stories_csv(
     output = StringIO()
     writer = csv.writer(output)
 
-    writer.writerow([
-        "id",
-        "title",
-        "story",
-        "virtues",
-        "keywords",
-        "age_group"
-    ])
+    writer.writerow(["id", "title", "story", "virtues", "keywords", "age_group"])
 
     for story in stories:
-
         writer.writerow([
             story.story_id,
             story.entity,
@@ -297,10 +304,9 @@ async def export_stories_csv(
     return Response(
         content=csv_content,
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
 
 @router.post("/import/csv")
 async def import_stories_csv(
@@ -320,35 +326,34 @@ async def import_stories_csv(
         if not reader.fieldnames:
             raise HTTPException(400, "Invalid CSV file")
 
-        imported = []
+        imported  = []
         duplicates = []
-        skipped = []
+        skipped   = []
 
         for row in reader:
-
             entity = (
-                row.get("title")
-                or row.get("Entity/Name")
-                or row.get("entity")
+                row.get("title") or
+                row.get("Entity/Name") or
+                row.get("entity")
             )
 
             story_text = (
-                row.get("story")
-                or row.get("Story Text / Story Problem")
-                or row.get("Story Text/ Story Problem")
-                or row.get("story_text")
+                row.get("story") or
+                row.get("Story Text / Story Problem") or
+                row.get("Story Text/ Story Problem") or
+                row.get("story_text")
             )
 
             virtues = (
-                row.get("virtues")
-                or row.get("Virtue(s)")
-                or row.get("Virtues")
+                row.get("virtues") or
+                row.get("Virtue(s)") or
+                row.get("Virtues")
             )
 
             keywords = (
-                row.get("keywords")
-                or row.get("Keywords/Synonyms")
-                or row.get("Keywords")
+                row.get("keywords") or
+                row.get("Keywords/Synonyms") or
+                row.get("Keywords")
             )
 
             raw_age = row.get("age_group") or row.get("Age Group")
@@ -363,9 +368,8 @@ async def import_stories_csv(
                 skipped.append(entity)
                 continue
 
-            virtues = clean_csv_field(virtues)
+            virtues  = clean_csv_field(virtues)
             keywords = clean_csv_field(keywords)
-
             age_group = normalize_age_group(raw_age)
 
             existing = db.query(Story).filter(
@@ -384,7 +388,7 @@ async def import_stories_csv(
                 user_id=current_user.user_id,
                 entity=entity.strip(),
                 virtues=virtues,
-                keywords=keywords,     # ⭐ FIXED
+                keywords=keywords,
                 age_group=age_group,
                 story_text=story_text_clean
             )
@@ -393,6 +397,12 @@ async def import_stories_csv(
             imported.append(entity)
 
         db.commit()
+
+        # ── rebuild once after all CSV rows are committed ──
+        try:
+            get_ml_service().rebuild_embeddings(db)
+        except Exception as e:
+            print(f"[stories] ⚠️ embedding rebuild failed (non-fatal): {e}")
 
         return {
             "message": "CSV import completed",
@@ -411,15 +421,13 @@ async def import_stories_csv(
 
 @router.get("/stats/summary")
 async def get_story_statistics(
-    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)), 
+    current_user: User = Depends(role_required(UserRole.ANNOTATOR, UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    
     total_stories = db.query(func.count(Story.story_id)).filter(
         Story.user_id == current_user.user_id
     ).scalar()
-    
-    # Count by age group
+
     age_group_stats = db.query(
         Story.age_group,
         func.count(Story.story_id)
@@ -427,8 +435,8 @@ async def get_story_statistics(
         Story.user_id == current_user.user_id,
         Story.age_group.isnot(None)
     ).group_by(Story.age_group).all()
-    
+
     return {
         "total_stories": total_stories,
-        "by_age_group": {ag: count for ag, count in age_group_stats}
+        "by_age_group": {ag: count for ag, count in age_group_stats},
     }

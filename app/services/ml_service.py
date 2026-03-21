@@ -137,6 +137,31 @@ class MLService:
         print(f"[MLService] warm-up complete — {len(self._story_ids)} stories indexed")
 
     # ─────────────────────────────────────────────────────────
+    # PUBLIC: rebuild_embeddings
+    # Called automatically after any story create / update / delete
+    # so the chatbot can find newly added stories immediately.
+    # ─────────────────────────────────────────────────────────
+    def rebuild_embeddings(self, db: Session) -> None:
+        print("[MLService] rebuilding embeddings after story change...")
+
+        # delete stale cache files so _get_*_embeddings rebuilds fresh
+        if os.path.exists(STORY_EMB_CACHE):
+            os.remove(STORY_EMB_CACHE)
+        if os.path.exists(VOCAB_EMB_CACHE):
+            os.remove(VOCAB_EMB_CACHE)
+
+        # reload everything from DB and recompute vectors
+        df = self._load_df(db)
+        self._story_meta                 = df[["story_id", "title", "story", "keywords"]].to_dict("records")
+        self._vocab, self._vocab_emb     = self._get_vocab_embeddings(df)
+        self._story_emb, self._story_ids = self._get_story_embeddings(df)
+
+        # clear anchor cache so age-anchor scores are recomputed too
+        self._anchor_emb_cache.clear()
+
+        print(f"[MLService] rebuild complete — {len(self._story_ids)} stories indexed")
+
+    # ─────────────────────────────────────────────────────────
     # PUBLIC: run_pipeline
     # ─────────────────────────────────────────────────────────
     def run_pipeline(
@@ -219,10 +244,10 @@ class MLService:
             raise ValueError("No stories found in the database.")
         return pd.DataFrame([{
             "story_id": s.story_id,
-            "title":    s.entity      or "",   # Story model uses 'entity' for title
-            "story":    s.story_text  or "",   # Story model uses 'story_text' for body
+            "title":    s.entity      or "",
+            "story":    s.story_text  or "",
             "keywords": s.keywords    or "",
-            "virtue":   s.virtues     or "",   # Story model uses 'virtues' (plural)
+            "virtue":   s.virtues     or "",
         } for s in stories])
 
     # ─────────────────────────────────────────────────────────
@@ -335,23 +360,18 @@ class MLService:
     # ─────────────────────────────────────────────────────────
     # STEP 3 — ADAPT  (SPEED OPTIMIZED)
     # ─────────────────────────────────────────────────────────
-
     def _run_model_single(self, prompt: str, max_new_tokens: int = 40) -> str:
-        """
-        SPEED: num_beams=1 (greedy decode) — ~3-5x faster than beam search.
-        Only used internally by _rewrite_sentence and _generate_moral.
-        """
         inputs = self._tokenizer(
             prompt,
             return_tensors="pt",
             max_length=512,
             truncation=True,
         ).to(self._device)
-        with torch.inference_mode():   # faster than no_grad
+        with torch.inference_mode():
             out = self._adapter.generate(
                 **inputs,
                 max_new_tokens       = max_new_tokens,
-                num_beams            = 1,              # GREEDY — key speedup
+                num_beams            = 1,
                 do_sample            = False,
                 repetition_penalty   = 1.2,
                 no_repeat_ngram_size = 3,
@@ -359,10 +379,6 @@ class MLService:
         return self._tokenizer.decode(out[0], skip_special_tokens=True).strip()
 
     def _run_model_batch(self, prompts: list[str], max_new_tokens: int = 40) -> list[str]:
-        """
-        SPEED: batch multiple sentences in one forward pass.
-        Falls back sentence-by-sentence if OOM.
-        """
         try:
             inputs = self._tokenizer(
                 prompts,
@@ -382,7 +398,6 @@ class MLService:
                 )
             return [self._tokenizer.decode(o, skip_special_tokens=True).strip() for o in out]
         except RuntimeError:
-            # OOM — fall back to one-by-one
             return [self._run_model_single(p, max_new_tokens) for p in prompts]
 
     def _build_prompt(self, sentence: str, age: str) -> str:
@@ -399,7 +414,6 @@ class MLService:
         )
 
     def _is_safe_rewrite(self, original: str, rewritten: str) -> bool:
-        """Quick safety check — rejects hallucinated rewrites."""
         orig_emb = self._embedder.encode(original,  convert_to_tensor=True, device=self._device)
         rew_emb  = self._embedder.encode(rewritten, convert_to_tensor=True, device=self._device)
         sim      = float(util.cos_sim(orig_emb, rew_emb))
@@ -416,20 +430,12 @@ class MLService:
         )
 
     def _adapt_story(self, story: str, age: str) -> str:
-        """
-        SPEED OPTIMIZATIONS:
-          - adult: instant return, zero model calls
-          - sentences < 5 words: skip model call
-          - BATCH_SIZE sentences sent together in one forward pass
-          - greedy decode (num_beams=1)
-        """
         if age == "adult":
             return story
 
         sentences = sent_tokenize(story)
-        BATCH_SIZE = 4   # tune down to 2 if VRAM is tight
+        BATCH_SIZE = 4
 
-        # Split into short (skip) vs long (needs model)
         indices_to_rewrite = [i for i, s in enumerate(sentences) if len(s.split()) >= 5]
         result = list(sentences)
 
@@ -451,12 +457,11 @@ class MLService:
         return " ".join(result)
 
     # ─────────────────────────────────────────────────────────
-    # STEP 4 — MORAL  (SPEED OPTIMIZED: single prompt, greedy)
+    # STEP 4 — MORAL
     # ─────────────────────────────────────────────────────────
     def _generate_moral(self, story: str, virtue: str, age: str) -> str:
         sentences = sent_tokenize(story)
 
-        # Find seed sentence most relevant to virtue
         query = virtue if virtue else story[:120]
         q_emb = self._embedder.encode(query, convert_to_tensor=True, device=self._device)
         best, best_sc = sentences[-1], -1.0
@@ -475,7 +480,6 @@ class MLService:
 
         virtue_hint = virtue if virtue else "doing the right thing"
 
-        # SPEED: single prompt, greedy decode, capped tokens
         prompt = (
             f"Story context: {context}\n\n"
             f"What does this story teach about {virtue_hint}? "
@@ -484,11 +488,9 @@ class MLService:
         )
         moral = self._run_model_single(prompt, max_new_tokens=50)
 
-        # Validate — fallback to template if bad
         if not moral or len(moral.split()) < 4:
             return _age_moral_suffix(virtue_hint, age)
 
-        # Echo check — reject if moral just repeats the prompt context
         m_emb = self._embedder.encode(moral,   convert_to_tensor=True, device=self._device)
         c_emb = self._embedder.encode(context, convert_to_tensor=True, device=self._device)
         if float(util.cos_sim(m_emb, c_emb)) > 0.92:
@@ -508,13 +510,13 @@ class MLService:
                 user_id            = user_id,
                 session_id         = session_id,
                 user_query         = user_query,
-                virtue             = virtue,           # column: virtue
+                virtue             = virtue,
                 age_group          = age_group,
                 length_preference  = length,
                 retrieved_story_id = story_id,
                 generated_story    = adapted,
                 moral              = moral,
-                response_time_ms   = elapsed_ms,       # column: response_time_ms
+                response_time_ms   = elapsed_ms,
             )
             db.add(conv)
             db.commit()
@@ -524,7 +526,7 @@ class MLService:
 
 
 # ─────────────────────────────────────────────────────────────
-# SINGLETON  management
+# SINGLETON management
 # ─────────────────────────────────────────────────────────────
 _ml_service_instance: Optional[MLService] = None
 
