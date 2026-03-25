@@ -1,7 +1,7 @@
 import { useState, useContext } from "react";
 import { login } from "../services/authService";
 import { AuthContext } from "../context/AuthContext";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -12,7 +12,6 @@ export default function Login() {
 
   const { loadUser } = useContext(AuthContext);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -22,15 +21,14 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const data = await login({ username, password }); 
-      await loadUser();                                 
+      const data = await login({ username, password });
+      await loadUser();
 
       const role = data?.user?.role?.toLowerCase();
-      const roleHint = searchParams.get("role");
 
       if (role === "admin") {
         navigate("/");
-      } else if (role === "annotator" || roleHint === "annotator") {
+      } else if (role === "annotator") {
         navigate("/annotator");
       } else {
         navigate("/chatbot");

@@ -5,6 +5,7 @@ import { AuthContext } from "../context/AuthContext";
 export default function ProtectedRoute({ children, role }) {
   const { user, authLoading } = useContext(AuthContext);
 
+  // Wait for auth check to finish before redirecting
   if (authLoading) {
     return (
       <div style={{
@@ -23,26 +24,18 @@ export default function ProtectedRoute({ children, role }) {
     );
   }
 
-  // Not logged in → go to login
   if (!user) return <Navigate to="/login" />;
 
   const userRole = user.role?.toLowerCase();
 
-  // Admin bypasses all role checks
+  // Admin can access everything
   if (userRole === "admin") return children;
 
+  // If a specific role is required, check it
+  // Annotators can access annotator pages AND chatbot (no role restriction on chatbot route)
   if (role) {
     const requiredRole = role.toLowerCase();
-
-    // /chatbot requires "user" role — annotators cannot access
-    if (requiredRole === "user" && userRole !== "user") {
-      return <Navigate to="/" />;
-    }
-
-    // /annotator requires "annotator" role — users cannot access
-    if (requiredRole === "annotator" && userRole !== "annotator") {
-      return <Navigate to="/" />;
-    }
+    if (userRole !== requiredRole) return <Navigate to="/" />;
   }
 
   return children;

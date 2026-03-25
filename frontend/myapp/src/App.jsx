@@ -15,17 +15,17 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Chatbot: user and admin only — annotators get redirected */}
+        {/* Protected: any logged-in user (user, annotator, admin) — no role prop = open to all authenticated */}
         <Route
           path="/chatbot"
           element={
-            <ProtectedRoute role="user">
+            <ProtectedRoute>
               <Chatbot />
             </ProtectedRoute>
           }
         />
 
-        {/* Annotator dashboard: annotator and admin only */}
+        {/* Protected: annotator or admin only */}
         <Route
           path="/annotator"
           element={
