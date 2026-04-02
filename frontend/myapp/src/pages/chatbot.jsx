@@ -53,8 +53,8 @@ export default function Chatbot() {
   const [messages,        setMessages]        = useState([]);
   const [input,           setInput]           = useState("");
   const [loading,         setLoading]         = useState(false);
-  const [ageGroup,        setAgeGroup]        = useState(null);
-  const [storyLength,     setStoryLength]     = useState(null);
+  const [ageGroup,        setAgeGroup]        = useState("adult");
+  const [storyLength,     setStoryLength]     = useState("long");
   const [selectedVirtue,  setSelectedVirtue]  = useState(null);
   const [showOtherVirtue, setShowOtherVirtue] = useState(false);
   const [otherVirtue,     setOtherVirtue]     = useState("");
@@ -128,7 +128,7 @@ export default function Chatbot() {
       setActiveSessionId(id); return id;
     })();
     try {
-      const res = await sendQuery({ age_group: ageGroup || "child", genre_or_virtue: text, story_length: storyLength || "medium", other_notes: "", session_id: sid });
+      const res = await sendQuery({ age_group: ageGroup || "adult", genre_or_virtue: text, story_length: storyLength || "long", other_notes: "", session_id: sid });
       setMessages((prev) => [...prev, { role: "bot", story: res.generated_story || res.story || "No story returned.", moral: res.moral || "" }]);
       loadSessions();
     } catch (err) {
@@ -318,7 +318,7 @@ export default function Chatbot() {
               <div style={{ width: 1, height: 18, background: C.border, margin: "0 2px", flexShrink: 0 }} />
               <span style={labelStyle}>Length:</span>
               {STORY_LENGTHS.map((s) => <button key={s} onClick={() => toggleStoryLength(s)} style={chipStyle(storyLength === s)}>{s}</button>)}
-              {(!ageGroup || !storyLength) && <span style={{ fontSize: 11, color: C.text3, marginLeft: 4, whiteSpace: "nowrap" }}>{!ageGroup && !storyLength ? "(defaults: child · medium)" : !ageGroup ? "(age default: child)" : "(length default: medium)"}</span>}
+              {(!ageGroup || !storyLength) && <span style={{ fontSize: 11, color: C.text3, marginLeft: 4, whiteSpace: "nowrap" }}>{!ageGroup && !storyLength ? "(defaults: adult · long)" : !ageGroup ? "(age default: adult)" : "(length default: long)"}</span>}
             </div>
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
               <span style={labelStyle}>Virtue:</span>

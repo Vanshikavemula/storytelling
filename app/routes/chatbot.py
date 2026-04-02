@@ -33,10 +33,10 @@ async def chatbot_query(
 
         result = ml_service.run_pipeline(
             db=db,
-            age_group=request.age_group,
+            age_group=request.age_group or "adult",
             genre_or_virtue=request.genre_or_virtue,
-            story_length=request.story_length or "medium",
-            other_notes=request.other_notes,
+            story_length=request.story_length or "long",
+            character=request.character,     
             user_id=current_user.user_id,
             session_id=session_id,
         )

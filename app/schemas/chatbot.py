@@ -5,10 +5,10 @@ from datetime import datetime
 
 class ChatbotRequest(BaseModel):
     genre_or_virtue: str = Field(..., min_length=2, max_length=300)
-    age_group: str = Field(default="child")
-    story_length: Optional[str] = Field(default="medium")
-    other_notes: Optional[str] = Field(default="", max_length=500)
-    session_id: Optional[str] = Field(default=None, description="Pass to continue an existing chat session")
+    character: Optional[str] = None
+    age_group: str = Field(default="adult")
+    story_length: Optional[str] = Field(default="long")
+    session_id: Optional[str] = Field(default=None)
 
     @validator("age_group")
     def validate_age_group(cls, v):
