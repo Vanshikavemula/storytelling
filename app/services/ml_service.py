@@ -226,6 +226,38 @@ def _partial_word_overlap(query_tokens: set[str], field_text: str) -> float:
 
     return matched / len(query_tokens)
 
+_GREETING_TOKENS = {
+    "hi", "hello", "hey", "hiya", "howdy", "sup", "yo", "greetings",
+    "bye", "goodbye", "thanks", "thank", "ok", "okay", "yes", "no",
+    "lol", "haha", "nice", "cool", "great", "wow", "hmm", "uh", "um",
+}
+
+def _is_story_query(text: str) -> bool:
+    """
+    Returns True only if the input looks like a genuine story/topic request.
+    Rejects greetings, single-word gibberish, and inputs with no
+    meaningful content tokens after stop-word removal.
+    """
+    if not text or not text.strip():
+        return False
+
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
+
+    # Reject pure greetings / social phrases
+    if all(t in _GREETING_TOKENS for t in tokens):
+        return False
+
+    # Remove stop words AND greeting tokens, then check what's left
+    meaningful = [
+        t for t in tokens
+        if t not in _STOP_WORDS
+        and t not in _GREETING_TOKENS
+        and len(t) > 1
+    ]
+
+    # Need at least one meaningful content word
+    return len(meaningful) > 0
+
 
 # ══════════════════════════════════════════════════════════════
 # ML SERVICE
@@ -641,6 +673,9 @@ class MLService:
         query = _safe_concat(virtue, keywords, character).lower()
         if not query:
             return None, None, None
+        if not _is_story_query(query):
+            print(f"[Retrieve] non-story input rejected: {query!r}")
+            return None, None, None
 
         query_tokens = _tokenize_query(query)
 
@@ -701,7 +736,7 @@ class MLService:
         # ─────────────────────────────────────────
         q_scores = util.cos_sim(self._embed(query), self._story_emb).squeeze(0)
 
-        THRESHOLD = 0.6   # 🔥 stricter
+        THRESHOLD = 0.75  
 
         valid = [i.item() for i in q_scores.argsort(descending=True) if q_scores[i] > THRESHOLD]
 
