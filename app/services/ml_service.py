@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-# Silence TensorFlow/Keras noise BEFORE any other import
 import os
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"   # stops oneDNN messages
-os.environ["TF_CPP_MIN_LOG_LEVEL"]  = "3"   # 0=all  1=info  2=warnings  3=errors only
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  
+os.environ["TF_CPP_MIN_LOG_LEVEL"]  = "3"   
 
 import warnings
 import logging
@@ -12,17 +11,6 @@ warnings.filterwarnings("ignore", message=".*sparse_softmax_cross_entropy.*")
 warnings.filterwarnings("ignore", message=r".*tf\.losses.*")
 logging.getLogger("tensorflow").setLevel(logging.ERROR)
 logging.getLogger("absl").setLevel(logging.ERROR)
-
-"""
-ml_service.py  —  standalone, VS Code friendly
-===============================================
-Pipeline:  retrieve → compress → adapt → moral
-Data:      database via SQLAlchemy Session
-No CSV, no API, no database, no Flask/FastAPI required.
-
-Run directly:
-    python ml_service.py
-"""
 
 import time
 import uuid
@@ -41,7 +29,7 @@ from app.models.story import Story, ChatbotConversation
 
 
 # ══════════════════════════════════════════════════════════════
-# CONFIG  ── every tunable value lives here, nothing buried below
+# CONFIG 
 # ══════════════════════════════════════════════════════════════
 
 # ── Models ────────────────────────────────────────────────────
@@ -684,7 +672,7 @@ class MLService:
         query_tokens = [t for t in query_tokens if t not in STOP]
 
         # ─────────────────────────────────────────
-        # STEP 1: KEYWORD COLUMN PRIORITY 🔥
+        # STEP 1: KEYWORD COLUMN PRIORITY 
         # ─────────────────────────────────────────
         keyword_matches = []
 

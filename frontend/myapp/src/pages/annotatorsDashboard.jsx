@@ -450,11 +450,11 @@ export default function AnnotatorsDashboard() {
                         setForm({ ...form, keywords: e.target.value });
                       }}
                     />
-                    {!form.keywords.trim() && (
+                    {/* {!form.keywords.trim() && (
                       <p style={{ fontSize: 12, color: "#f97316", marginTop: 4 }}>
                         ⚠️ Keywords are required — they help the AI match user queries to this story.
                       </p>
-                    )}
+                    )} */}
                     {form.keywords.trim() && (
                       <p style={{ fontSize: 11, color: C.text3, marginTop: 4 }}>
                         ✓ You can edit these keywords freely.
