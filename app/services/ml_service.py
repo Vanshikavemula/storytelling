@@ -85,13 +85,6 @@ AGE_COMPLEXITY_RANGE: dict[str, tuple[float, float]] = {
     "adult": (0.30, 1.00),
 }
 
-# ── Retrieval score weights ────────────────────────────────────
-# final_score = W_VIRTUE  * virtue_sim
-#             + W_KEYWORD * keyword_sim      (from keywords column)
-#             + W_VIRTUE_COL * virtue_col_sim (from virtues column)
-#             + W_ANCHOR  * age_anchor_sim
-#             - W_EXCL    * exclusion_sim     (child only)
-#
 # Both keyword and virtue columns contribute independently so the
 # pipeline works correctly whether the DB has one, both, or neither.
 W_VIRTUE     = 0.35   # user-supplied virtue / topic query
